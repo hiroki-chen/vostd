@@ -25,6 +25,7 @@ pub mod ghost_tree;
 pub mod ownership;
 pub mod panic;
 pub mod resource;
+pub mod weak_mem;
 
 #[macro_use]
 pub mod trans_macros;
