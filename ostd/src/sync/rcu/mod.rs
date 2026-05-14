@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
-//! Read-copy update (RCU).
+//! Verified Read-copy update (RCU).
+//!
+//! See [this](https://docs.kernel.org/RCU/checklist.html).
 /* use core::{
     marker::PhantomData,
     mem::ManuallyDrop,
@@ -59,6 +61,13 @@ pub mod non_null;
 ///
 /// assert_eq!(*rcu_guard, Some(&43));
 /// ```
+///
+/// In the verified version, we will uphold the following properties:
+///
+/// 1. RCU does allow _readers_ to access the protected data concurrently without blocking each other.
+/// 2. RCU does NOT guarantee that multiple _writers_ can update the protected data concurrently. Writers
+///    must still use some sort of mutual exclusion like locks, atomic operations, etc. Please exercise
+///    extra care when dealing with weakly ordered machines.
 pub struct Rcu<P: NonNullPtr>(RcuInner<P>);
 
 /// A guard that allows access to the pointed data protected by a [`Rcu`].
