@@ -41,6 +41,7 @@ use vstd_extra::panic::*;
 use vstd_extra::{assert, assert_eq};
 
 use crate::mm::frame::{AnyFrameMeta, Frame};
+use crate::mm::page_size_spec;
 use crate::mm::page_table::*;
 use crate::mm::{MAX_NR_LEVELS, MAX_PADDR, Paddr, Vaddr, page_size};
 use crate::specs::mm::frame::mapping::{
