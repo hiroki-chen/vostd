@@ -1146,7 +1146,6 @@ impl KVirtArea {
         pa_range: Range<Paddr>,
         prop: PageProperty,
     ) -> Self {
-        
         assert!(pa_range.start.is_multiple_of(PAGE_SIZE));
         assert!(pa_range.end.is_multiple_of(PAGE_SIZE));
         assert!(area_size.is_multiple_of(PAGE_SIZE));
@@ -1154,7 +1153,6 @@ impl KVirtArea {
         assert!(map_offset + vstd_extra::external::range::range_usize_len(&pa_range) <= area_size);
 
         // let irq_guard = irq::disable_local();
-
 
         let range_res = KVIRT_AREA_ALLOCATOR.alloc(area_size);
         // Rust's `unwrap()` panics if not ok. TODO: make our own wrapper.

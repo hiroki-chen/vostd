@@ -222,6 +222,12 @@ pub unsafe trait PageTableConfig: Clone + Debug + Send + Sync + 'static {
                 &&& Self::LEADING_BITS_spec() as int * 0x1_0000_0000_0000int
                     == 0x1_0000_0000_0000_0000int - pow2(Self::C::ADDRESS_WIDTH() as nat) as int
             },
+            Self::LEADING_BITS_spec() < 0x1_0000_usize,
+            pow2(
+                (Self::C::ADDRESS_WIDTH() as int - pte_index_bit_offset_spec::<Self::C>(
+                    Self::C::NR_LEVELS(),
+                )) as nat,
+            ) as int == NR_ENTRIES as int,
     ;
 
     /// Properties derived from the constant requirements.
@@ -799,9 +805,8 @@ fn top_level_index_width<C: PageTableConfig>() -> (ret: usize)
         ret == C::ADDRESS_WIDTH() - pte_index_bit_offset_spec::<C>(C::NR_LEVELS()),
 {
     proof {
-        C::lemma_paging_consts_properties();
-        C::lemma_top_level_index_range_bounds();
-        assert(1 <= C::NR_LEVELS() <= NR_LEVELS);
+        C::lemma_paging_consts_requirements();
+        C::lemma_page_table_config_constant_requirements();
     }
 
     C::ADDRESS_WIDTH() - pte_index_bit_offset::<C>(C::NR_LEVELS())
@@ -847,8 +852,7 @@ fn pt_va_range_end<C: PageTableConfig>() -> (ret: Vaddr)
 {
     let idx_end = C::TOP_LEVEL_INDEX_RANGE().end;
     proof {
-        C::lemma_paging_consts_properties();
-        assert(1 <= C::NR_LEVELS() <= NR_LEVELS);
+        C::lemma_paging_consts_requirements();
     }
     let offset = pte_index_bit_offset::<C>(C::NR_LEVELS());
 
@@ -949,7 +953,7 @@ fn vaddr_range_bounds<C: PageTableConfig>() -> (ret: (Vaddr, Vaddr))
     let sign_bit_set = sign_bit_of_va::<C>(pt_start);
     if va_sign_ext && sign_bit_set {
         proof {
-            C::lemma_leading_bits_only_when_high_half();
+            // C::lemma_leading_bits_only_when_high_half();
             assert(va_sign_ext == C::VA_SIGN_EXT());
             let off = pte_index_bit_offset_spec::<C::C>(C::NR_LEVELS()) as nat;
             let aw_m1 = (C::ADDRESS_WIDTH() - 1) as nat;
