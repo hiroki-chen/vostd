@@ -158,6 +158,7 @@ pub(crate) struct KernelPtConfig {}
 
 // We use the first available PTE bit to mark the frame as tracked.
 // SAFETY: `item_into_raw` and `item_from_raw` are implemented correctly,
+#[verus_verify]
 unsafe impl PageTableConfig for KernelPtConfig {
     open spec fn TOP_LEVEL_INDEX_RANGE_spec() -> Range<usize> {
         256..512
@@ -261,11 +262,12 @@ unsafe impl PageTableConfig for KernelPtConfig {
 
     //    #[verifier::when_used_as_spec(item_into_raw_spec)]
     #[verifier::external_body]
-    fn item_into_raw(item: Self::Item) -> (res: (Paddr, PagingLevel, PageProperty))
+    #[verus_spec(res =>
         ensures
             1 <= res.1 <= crate::specs::arch::NR_LEVELS,
             res == Self::item_into_raw_spec(item),
-    {
+    )]
+    fn item_into_raw(item: Self::Item) -> (Paddr, PagingLevel, PageProperty) {
         match item {
             MappedItem::Tracked(frame, mut prop) => {
                 debug_assert!(!prop.flags.contains(PageFlags::AVAIL1()));
@@ -290,11 +292,11 @@ unsafe impl PageTableConfig for KernelPtConfig {
 
     //#[verifier::when_used_as_spec(item_from_raw_spec)]
     #[verifier::external_body]
-    unsafe fn item_from_raw(paddr: Paddr, level: PagingLevel, prop: PageProperty) -> (res:
-        Self::Item)
+    #[verus_spec(res =>
         ensures
             res == Self::item_from_raw_spec(paddr, level, prop),
-    {
+    )]
+    unsafe fn item_from_raw(paddr: Paddr, level: PagingLevel, prop: PageProperty) -> Self::Item {
         if prop.flags.contains(PageFlags::AVAIL1()) {
             debug_assert_eq!(level, 1);
             // SAFETY: The caller ensures safety.

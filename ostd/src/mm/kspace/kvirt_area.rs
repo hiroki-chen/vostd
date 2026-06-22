@@ -1118,19 +1118,11 @@ impl KVirtArea {
     ///  - the map offset plus the length of the physical range exceeds the
     ///    area size;
     ///  - the provided physical range contains tracked physical addresses.
-    #[verus_spec(
+    #[verus_spec(res =>
         with Tracked(owner): Tracked<KVirtAreaOwner>,
-            Tracked(root_guard): Tracked<PageTableGuard<'a, KernelPtConfig>>,
-            Tracked(regions): Tracked<&mut MetaRegionOwners>,
-            Tracked(guards): Tracked<&mut Guards<'a>>
-    )]
-    #[allow(private_interfaces)]
-    pub unsafe fn map_untracked_frames<A: InAtomicMode + 'a, 'a>(
-        area_size: usize,
-        map_offset: usize,
-        pa_range: Range<Paddr>,
-        prop: PageProperty,
-    ) -> (res: Self)
+             Tracked(root_guard): Tracked<PageTableGuard<'a, KernelPtConfig>>,
+             Tracked(regions): Tracked<&mut MetaRegionOwners>,
+             Tracked(guards): Tracked<&mut Guards<'a>>,
         requires
     // **Precise form** (post Phases A/B/C). Bounds are caller-
     // provable; OOM uses the implication form.
@@ -1145,13 +1137,23 @@ impl KVirtArea {
             final(regions).inv(),
             res.inv(),
             !Self::map_untracked_frames_panic_condition(area_size, map_offset, &pa_range),
-    {
-        assert!(pa_range.start % PAGE_SIZE == 0);
-        assert!(pa_range.end % PAGE_SIZE == 0);
-        assert!(area_size % PAGE_SIZE == 0);
-        assert!(map_offset % PAGE_SIZE == 0);
-
+    )]
+    #[allow(private_interfaces)]
+    pub unsafe fn map_untracked_frames<A: InAtomicMode + 'a, 'a>(
+        area_size: usize,
+        map_offset: usize,
+        pa_range: Range<Paddr>,
+        prop: PageProperty,
+    ) -> Self {
+        
+        assert!(pa_range.start.is_multiple_of(PAGE_SIZE));
+        assert!(pa_range.end.is_multiple_of(PAGE_SIZE));
+        assert!(area_size.is_multiple_of(PAGE_SIZE));
+        assert!(map_offset.is_multiple_of(PAGE_SIZE));
         assert!(map_offset + vstd_extra::external::range::range_usize_len(&pa_range) <= area_size);
+
+        // let irq_guard = irq::disable_local();
+
 
         let range_res = KVIRT_AREA_ALLOCATOR.alloc(area_size);
         // Rust's `unwrap()` panics if not ok. TODO: make our own wrapper.
