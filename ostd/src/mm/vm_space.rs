@@ -38,21 +38,19 @@ use core::marker::PhantomData;
 use core::{ops::Range, sync::atomic::Ordering};
 use vstd_extra::ghost_tree::*;
 use vstd_extra::panic::may_panic;
+use vstd_extra::prelude::*;
 use vstd_extra::{assert, assert_eq};
 
 use crate::mm::kspace::KERNEL_PAGE_TABLE;
 use crate::mm::tlb::*;
 use crate::specs::mm::cpu::{AtomicCpuSet, CpuSet};
 
-use crate::specs::mm::io::VmIoOwner;
-use crate::{
-    mm::{
-        MAX_USERSPACE_VADDR, Paddr, PagingConstsTrait, PagingLevel, Vaddr,
-        io::{Fallible, VmReader, VmWriter},
-        page_prop::PageProperty,
-    },
-    prelude::*,
+use crate::mm::{
+    MAX_USERSPACE_VADDR, Paddr, PagingConstsTrait, PagingLevel, Vaddr,
+    io::{Fallible, VmReader, VmWriter},
+    page_prop::PageProperty,
 };
+use crate::specs::mm::io::VmIoOwner;
 
 use alloc::sync::Arc;
 
@@ -1569,6 +1567,7 @@ pub(super) fn get_activated_vm_space() -> *const VmSpace {
 }*/
 
 /// The configuration for user page tables.
+#[verifier::allow(autoderive_clone_without_spec)]
 #[derive(Clone, Debug)]
 pub struct UserPtConfig {}
 
@@ -1621,7 +1620,7 @@ unsafe impl PageTableConfig for UserPtConfig {
 
     type C = PagingConsts;
 
-    proof fn lemma_top_level_index_range_bounds() {
+    proof fn lemma_page_table_config_constant_requirements() {
         use crate::mm::nr_subpage_per_huge;
         use crate::mm::page_table::{nr_pte_index_bits, pte_index_bit_offset_spec};
         use vstd::arithmetic::power2::{lemma2_to64, lemma2_to64_rest, lemma_pow2_adds, pow2};
@@ -1680,13 +1679,12 @@ unsafe impl PageTableConfig for UserPtConfig {
         MappedItem { frame, prop }
     }
 
-    axiom fn axiom_nr_subpage_per_huge_eq_nr_entries();
-
     axiom fn axiom_pte_size_eq_size_of();
 
-    axiom fn axiom_pte_walk_fills_page();
-
-    axiom fn axiom_top_level_index_range_within_nr_entries();
+    proof fn lemma_pte_walk_fills_page() {
+        Self::lemma_page_table_config_constant_requirements();
+        Self::axiom_pte_size_eq_size_of();
+    }
 
     axiom fn axiom_pte_align_divides_size();
 

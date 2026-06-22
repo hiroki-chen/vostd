@@ -153,6 +153,7 @@ pub exec static KERNEL_PAGE_TABLE: OnceImpl<PageTable<KernelPtConfig>, TrivialPr
     Ghost(TrivialPred),
 );
 
+#[verifier::allow(autoderive_clone_without_spec)]
 #[derive(Clone, Debug)]
 pub(crate) struct KernelPtConfig {}
 
@@ -168,7 +169,7 @@ unsafe impl PageTableConfig for KernelPtConfig {
         0xffff
     }
 
-    proof fn lemma_top_level_index_range_bounds() {
+    proof fn lemma_page_table_config_constant_requirements() {
         use crate::mm::nr_subpage_per_huge;
         use crate::mm::page_table::{nr_pte_index_bits, pte_index_bit_offset_spec};
         use vstd::arithmetic::power2::{lemma2_to64, lemma2_to64_rest, lemma_pow2_adds, pow2};
@@ -181,20 +182,6 @@ unsafe impl PageTableConfig for KernelPtConfig {
         lemma_usize_pow2_ilog2(12);
         lemma_usize_pow2_ilog2(9);
         lemma_pow2_adds(9, 39);
-    }
-
-    proof fn lemma_leading_bits_only_when_high_half() {
-        use crate::mm::nr_subpage_per_huge;
-        use crate::mm::page_table::{nr_pte_index_bits, pte_index_bit_offset_spec};
-        use vstd::arithmetic::power2::{lemma2_to64, lemma2_to64_rest, lemma_pow2_adds, pow2};
-        use vstd_extra::prelude::lemma_usize_pow2_ilog2;
-
-        lemma2_to64();
-        lemma2_to64_rest();
-        assert(usize::BITS == 64) by (compute);
-        vstd::layout::unsigned_int_max_values();
-        lemma_usize_pow2_ilog2(12);
-        lemma_usize_pow2_ilog2(9);
         lemma_pow2_adds(8, 39);
         assert(nr_subpage_per_huge::<PagingConsts>() == 512_usize);
         assert(nr_pte_index_bits::<PagingConsts>() == 9_usize);
@@ -203,14 +190,9 @@ unsafe impl PageTableConfig for KernelPtConfig {
         assert((256 as int) * pow2(39) == pow2(47));
         assert(((256 as int) * (pow2(39) as int)) / (pow2(47) as int) == 1);
         assert(pte_index_bit_offset_spec::<Self::C>(Self::C::NR_LEVELS()) == 39);
-        assert(Self::TOP_LEVEL_INDEX_RANGE_spec().start == 256_usize);
-        assert(Self::C::ADDRESS_WIDTH() == 48usize);
-        assert((Self::C::ADDRESS_WIDTH() - 1) as nat == 47nat);
         assert((Self::TOP_LEVEL_INDEX_RANGE_spec().start as int) * (pow2(
             pte_index_bit_offset_spec::<Self::C>(Self::C::NR_LEVELS()) as nat,
         ) as int) == pow2(47) as int);
-        assert(pow2((Self::C::ADDRESS_WIDTH() - 1) as nat) == pow2(47));
-        assert(pow2(47) as int > 0);
         assert((((Self::TOP_LEVEL_INDEX_RANGE_spec().start as int) * (pow2(
             pte_index_bit_offset_spec::<Self::C>(Self::C::NR_LEVELS()) as nat,
         ) as int)) / (pow2((Self::C::ADDRESS_WIDTH() - 1) as nat) as int)) == 1);
@@ -228,10 +210,7 @@ unsafe impl PageTableConfig for KernelPtConfig {
             == 0x1_0000_0000_0000_0000int - pow2(Self::C::ADDRESS_WIDTH() as nat) as int);
     }
 
-    fn TOP_LEVEL_INDEX_RANGE() -> (r: Range<usize>)
-        ensures
-            r == Self::TOP_LEVEL_INDEX_RANGE_spec(),
-    {
+    fn TOP_LEVEL_INDEX_RANGE() -> (r: Range<usize>) {
         256..512
     }
 
@@ -239,10 +218,7 @@ unsafe impl PageTableConfig for KernelPtConfig {
         false
     }
 
-    fn TOP_LEVEL_CAN_UNMAP() -> (b: bool)
-        ensures
-            b == Self::TOP_LEVEL_CAN_UNMAP_spec(),
-    {
+    fn TOP_LEVEL_CAN_UNMAP() -> (b: bool) {
         false
     }
 
@@ -307,13 +283,12 @@ unsafe impl PageTableConfig for KernelPtConfig {
         }
     }
 
-    axiom fn axiom_nr_subpage_per_huge_eq_nr_entries();
-
     axiom fn axiom_pte_size_eq_size_of();
 
-    axiom fn axiom_pte_walk_fills_page();
-
-    axiom fn axiom_top_level_index_range_within_nr_entries();
+    proof fn lemma_pte_walk_fills_page() {
+        Self::lemma_page_table_config_constant_requirements();
+        Self::axiom_pte_size_eq_size_of();
+    }
 
     axiom fn axiom_pte_align_divides_size();
 
@@ -503,10 +478,13 @@ impl KernelPtConfig {
     ;
 
     /// For KernelPtConfig (x86_64): HIGHEST_TRANSLATION_LEVEL = 2 < NR_LEVELS = 4.
-    pub axiom fn axiom_kernel_htl_lt_nr_levels()
+    pub proof fn lemma_kernel_htl_lt_nr_levels()
         ensures
             (KernelPtConfig::HIGHEST_TRANSLATION_LEVEL() as int) < NR_LEVELS as int,
-    ;
+    {
+        assert(KernelPtConfig::HIGHEST_TRANSLATION_LEVEL() == 2);
+        assert(NR_LEVELS == 4usize);
+    }
 }
 
 /*
