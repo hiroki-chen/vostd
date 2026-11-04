@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MPL-2.0
-use vstd::atomic_ghost::*;
-use vstd::prelude::*;
-use vstd::resource::{
-    Loc,
-    ghost_var::{GhostVar, GhostVarAuth},
+use vstd::{
+    atomic_ghost::*,
+    prelude::*,
+    resource::{
+        Loc,
+        ghost_var::{GhostVar, GhostVarAuth},
+    },
 };
 use vstd_extra::resource_invariant::ResourceInvariant;
 
+use super::{LocalIrqDisabled, SpinLock};
+use crate::task::{Task, scheduler};
 use alloc::{collections::VecDeque, sync::Arc};
 use core::intrinsics::atomic_cxchg;
 use core::sync::atomic::{/*AtomicBool,*/ Ordering};
-
-use super::{LocalIrqDisabled, SpinLock};
-use crate::task::{Task, scheduler};
 
 // # Explanation on the memory orders
 //
@@ -79,7 +80,7 @@ closed spec fn wf(self) -> bool {
     // ID links it to the mirror protected by `wakers`.
     invariant on num_wakers with (wakers) is (v: u32, g: GhostVarAuth<int>) {
         &&& g.id() == wakers.constant()
-        &&& g@ == v as int
+        &&& g@ == v
     }
 }
 }
@@ -325,9 +326,6 @@ impl Waiter {
             ret.0.rel_waker(ret.1),
     )]
     pub fn new_pair() -> (Self, Arc<Waker>) {
-        proof_decl! {
-            let ghost waker_id: int = arbitrary();
-        }
         let waker = Arc::new(
             Waker {
                 has_woken: AtomicBool::new(Ghost(()), false, Tracked(())),

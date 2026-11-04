@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: MPL-2.0
-use vstd::atomic_ghost::*;
-use vstd::cell::{self, CellId, pcell::*};
-use vstd::prelude::*;
-use vstd::resource::Loc;
 #[cfg(feature = "irc11")]
 use vstd::thread_view::Objective;
-use vstd_extra::resource::ghost_resource::{count_auth::*, count_ghost::*, csum::*, excl::*};
-use vstd_extra::sum::*;
+use vstd::{
+    atomic_ghost::*,
+    cell::{self, CellId, pcell::*},
+    prelude::*,
+    resource::Loc,
+    std_specs::fmt::{DebugSpec, DebugSpecImpl},
+};
+use vstd_extra::{
+    resource::ghost_resource::{count_auth::*, count_ghost::*, csum::*, excl::*},
+    sum::*,
+};
 
 use core::{
     cell::UnsafeCell,
+    fmt,
     ops::{Deref, DerefMut},
     sync::atomic::{
         // AtomicUsize,
@@ -306,10 +312,10 @@ impl<T> RwMutex<T> {
         };
 
         Self {
-            // val: UnsafeCell::new(val),
-            val,
             lock: AtomicUsize::new(Ghost((val, Ghost(ghost_id))), 0, Tracked(perms)),
             queue: WaitQueue::new(),
+            // val: UnsafeCell::new(val),
+            val,
             ghost_id: Ghost(ghost_id),
         }
     }
@@ -529,8 +535,8 @@ impl<T  /*: ?Sized*/ > RwMutex<T> {
     }
 } */
 
-/// Because there can be more than one readers to get the T's immutable ref,
-/// so T must be Sync to guarantee the sharing safety.
+// There can be more than one readers to get the `T`'s immutable reference,
+// so `T` must be `Sync` to guarantee the sharing safety.
 #[verifier::external]
 unsafe impl<T:   /*: ?Sized +*/ Send> Send for RwMutex<T> {
 
@@ -615,6 +621,18 @@ impl<T  /*: ?Sized*/ > Deref for RwMutexReadGuard<'_, T> {
     }
 }
 
+impl<T: fmt::Debug> DebugSpecImpl for RwMutexReadGuard<'_, T> {
+    open spec fn fmt_req(&self, f: &fmt::Formatter<'_>) -> bool {
+        self.view().fmt_req(f)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for RwMutexReadGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
 impl<T  /* : ?Sized */ > RwMutexReadGuard<'_, T> {
     fn drop(self) {
         // When there are no readers, wake up a waiting writer.
@@ -684,16 +702,27 @@ impl<T  /*: ?Sized*/ > Deref for RwMutexWriteGuard<'_, T> {
     }
 }
 
+impl<T: fmt::Debug> DebugSpecImpl for RwMutexWriteGuard<'_, T> {
+    open spec fn fmt_req(&self, f: &fmt::Formatter<'_>) -> bool {
+        self.view().fmt_req(f)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for RwMutexWriteGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
 impl<'a, T  /*: ?Sized*/ > RwMutexWriteGuard<'a, T> {
     /// Atomically downgrades a write guard to an upgradeable reader guard.
     ///
     /// This method always succeeds because the lock is exclusively held by the writer.
     #[verifier::exec_allows_no_decreases_clause]
-    pub fn downgrade(self) -> RwMutexUpgradeableGuard<'a, T> {
-        let mut this = self;
+    pub fn downgrade(mut self) -> RwMutexUpgradeableGuard<'a, T> {
         loop {
-            this =
-            match this.try_downgrade() {
+            self =
+            match self.try_downgrade() {
                 Ok(guard) => return guard,
                 Err(e) => e,
             };
@@ -874,23 +903,22 @@ impl<'a, T> RwMutexUpgradeableGuard<'a, T> {
     /// - First, it needs to sleep in an extra waiting queue and needs extra wake-up logic and overhead.
     /// - Second, upgrading method usually requires a high response time (because the mutex is being used now).
     #[verifier::exec_allows_no_decreases_clause]
-    pub fn upgrade(self) -> RwMutexWriteGuard<'a, T> {
-        let mut this = self;
+    pub fn upgrade(mut self) -> RwMutexWriteGuard<'a, T> {
         proof! {
-            use_type_invariant(&this);
-            use_type_invariant(&this.inner);
+            use_type_invariant(&self);
+            use_type_invariant(&self.inner);
             lemma_consts_properties();
         }
         atomic_with_ghost!(
-            this.inner.lock => fetch_or(BEING_UPGRADED);
+            self.inner.lock => fetch_or(BEING_UPGRADED);
             update prev -> next;
             ghost g => {
                 lemma_consts_properties_prev_next(prev, next);
             }
         );
         loop {
-            this =
-            match this.try_upgrade() {
+            self =
+            match self.try_upgrade() {
                 Ok(guard) => return guard,
                 Err(e) => e,
             };
@@ -1028,6 +1056,18 @@ impl<T  /*: ?Sized*/ > Deref for RwMutexUpgradeableGuard<'_, T> {
         self.inner.val.borrow(
             Tracked(self.tracked_token.borrow().tracked_borrow().tracked_borrow()),
         )
+    }
+}
+
+impl<T: fmt::Debug> DebugSpecImpl for RwMutexUpgradeableGuard<'_, T> {
+    open spec fn fmt_req(&self, f: &fmt::Formatter<'_>) -> bool {
+        self.view().fmt_req(f)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for RwMutexUpgradeableGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
     }
 }
 

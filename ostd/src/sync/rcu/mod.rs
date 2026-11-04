@@ -11,11 +11,13 @@ use vstd::{
     atomic_ghost::AtomicPtr, atomic_with_ghost, map::Map, modes::tracked_static_ref, prelude::*,
     resource::Loc,
 };
-
 use vstd_extra::{
+    once::Once,
     prelude::*,
     resource::ghost_resource::count_auth::{Count, CountResource},
 };
+
+use crate::specs::task::InAtomicMode;
 
 use core::{
     marker::PhantomData, mem::ManuallyDrop, ops::Deref,
@@ -30,9 +32,8 @@ use core::{
 
 use non_null::{NonNullPtr, NonNullPtrRef};
 // use spin::once::Once;
-use super::Once;
 
-use self::monitor::{RcuMonitor, RcuMonitorOwner, RcuMonitorPred};
+use self::monitor::{RcuMonitor, RcuMonitorInvariant, RcuMonitorPred};
 use crate::task::{
     DisabledPreemptGuard,
     //atomic_mode::{AsAtomicModeGuard, InAtomicMode},
@@ -41,8 +42,6 @@ use crate::task::{
 
 mod monitor;
 pub mod non_null;
-
-use crate::specs::task::InAtomicMode;
 
 verus! {
 
@@ -465,10 +464,7 @@ impl<P: NonNullPtr + Send> RcuInner<P> {
         NonNull::new(obj_ptr).map(
             |ptr|
                 requires
-                    P::ptr_perm_match(
-                        ptr.view_ptr_mut(),
-                        P::ref_perm_view_permission(tracked_ref_perm),
-                    ),
+                    P::ptr_perm_match(ptr.as_ptr(), P::ref_perm_view_permission(tracked_ref_perm)),
                 {
                     unsafe { P::raw_as_ref(ptr, Tracked(tracked_ref_perm)) }
                 },
@@ -519,7 +515,7 @@ impl<'a, P: NonNullPtr + Send> RcuReadGuardInner<'a, P> {
             |ptr|
                 requires
                     self.tracked_ref_perm@ is Some,
-                    P::ptr_perm_match(ptr.view_ptr_mut(), self.tracked_ref_perm->0.resource()),
+                    P::ptr_perm_match(ptr.as_ptr(), self.tracked_ref_perm->0.resource()),
                 {
                     unsafe {
                         P::raw_as_ref(
@@ -549,7 +545,6 @@ impl<'a, P: NonNullPtr + Send> RcuReadGuardInner<'a, P> {
         }
         proof_decl! {
             let tracked mut tracked_ref_perm = self.tracked_ref_perm.get();
-            let ghost new_ptr_is_some = new_ptr is Some;
             let tracked mut old_perm: Option<RcuReadPool<P>> = None;
             let tracked mut err_new_perm: Option<Option<<P as NonNullPtr>::Permission>> = None;
         }
@@ -1052,7 +1047,7 @@ impl<T: Send + 'static> Drop for RcuDrop<T> {
 ///
 /// The caller must ensure that this CPU is not executing in a RCU read-side
 /// critical section.
-pub unsafe fn finish_grace_period() {
+pub(crate) unsafe fn finish_grace_period() {
     let rcu_monitor = RCU_MONITOR.get().unwrap();
     // SAFETY: The caller ensures safety.
     unsafe {
@@ -1062,7 +1057,7 @@ pub unsafe fn finish_grace_period() {
 
 */
 
-exec static RCU_MONITOR: Once<RcuMonitor, RcuMonitorOwner, RcuMonitorPred>
+exec static RCU_MONITOR: Once<RcuMonitor, RcuMonitorInvariant, RcuMonitorPred>
     ensures
         RCU_MONITOR.wf(),
         RCU_MONITOR.inv() == RcuMonitorPred,
@@ -1070,7 +1065,7 @@ exec static RCU_MONITOR: Once<RcuMonitor, RcuMonitorOwner, RcuMonitorPred>
     Once::new(Ghost(RcuMonitorPred))
 }
 
-pub fn init() {
+pub(super) fn init() {
     RCU_MONITOR.init(RcuMonitor::new_data());
 }
 

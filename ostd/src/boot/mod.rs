@@ -4,18 +4,20 @@
 //!     rest of OSTD;
 //!  2. the routine booting into the actual kernel;
 //!  3. the routine booting the other processors in the SMP context.
+use vstd::prelude::*;
+
 pub mod memory_region;
 //pub mod smp;
 
-/*
-use alloc::{
+/* use alloc::{
     string::{String, ToString},
     vec::Vec,
-};
+}; */
 
 use memory_region::{MemoryRegion, MemoryRegionArray};
 use spin::Once;
 
+/*
 /// The boot information provided by the bootloader.
 pub struct BootInfo {
     /// The name of the bootloader.
@@ -38,7 +40,7 @@ pub fn boot_info() -> &'static BootInfo {
 }
 
 static INFO: Once<BootInfo> = Once::new();
-
+*/
 /// ACPI information from the bootloader.
 ///
 /// The boot crate can choose either providing the raw RSDP physical address or
@@ -57,6 +59,7 @@ pub enum BootloaderAcpiArg {
 }
 
 /// The framebuffer arguments.
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 pub struct BootloaderFramebufferArg {
     /// The address of the buffer.
@@ -91,6 +94,7 @@ pub(crate) struct EarlyBootInfo {
 /// The boot-time information.
 pub(crate) static EARLY_INFO: Once<EarlyBootInfo> = Once::new();
 
+/*
 /// Initializes the boot information.
 ///
 /// This function copies the boot-time accessible information to the heap to

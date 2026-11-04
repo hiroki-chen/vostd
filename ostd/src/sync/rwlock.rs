@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MPL-2.0
-use vstd::atomic_ghost::*;
-use vstd::cell::{self, CellId, pcell::*};
-use vstd::prelude::*;
-use vstd::resource::Loc;
 #[cfg(feature = "irc11")]
 use vstd::thread_view::Objective;
-use vstd_extra::resource::ghost_resource::{count_auth::*, count_ghost::*, csum::*, excl::*};
-use vstd_extra::sum::*;
-use vstd_extra::{prelude::*, resource};
+use vstd::{
+    atomic_ghost::*,
+    cell::{self, CellId, pcell::*},
+    prelude::*,
+    resource::Loc,
+};
+use vstd_extra::{
+    prelude::*,
+    resource::{
+        self,
+        ghost_resource::{count_auth::*, count_ghost::*, csum::*, excl::*},
+    },
+    sum::*,
+};
 
 use alloc::sync::Arc;
 use core::char::MAX;
@@ -81,7 +88,7 @@ pub closed spec fn no_max_reader_overflow(v: usize) -> bool {
 }
 
 struct_with_invariants! {
-/// Spin-based Read-write Lock
+/// A spin lock that provides data access to either one writer or many readers.
 ///
 /// # Overview
 ///
@@ -478,8 +485,8 @@ impl<T  /*: ?Sized*/ , G: SpinGuardian> RwLock<T, G> {
         if lock & (WRITER | MAX_READER | BEING_UPGRADED) == 0 {
             Some(
                 RwLockReadGuard {
-                    inner: self,
                     guard,
+                    inner: self,
                     tracked_token: Tracked(read_token.tracked_unwrap()),
                 },
             )
@@ -546,8 +553,8 @@ impl<T  /*: ?Sized*/ , G: SpinGuardian> RwLock<T, G> {
         ).is_ok() {
             Some(
                 RwLockWriteGuard {
-                    inner: self,
                     guard,
+                    inner: self,
                     tracked_perm: Tracked(guard_perm.tracked_unwrap()),
                     tracked_token: Tracked(guard_token.tracked_unwrap()),
                 },
@@ -590,8 +597,8 @@ impl<T  /*: ?Sized*/ , G: SpinGuardian> RwLock<T, G> {
         if lock == 0 {
             return Some(
                 RwLockUpgradeableGuard {
-                    inner: self,
                     guard,
+                    inner: self,
                     tracked_token: Tracked(upgrade_guard_token.tracked_unwrap()),
                 },
             );
@@ -616,11 +623,7 @@ impl<T  /*: ?Sized*/ , G: SpinGuardian> RwLock<T, G> {
             );
         }
         None
-    }
-}
-
-/*
-impl<T, G: SpinGuardian> RwLock<T, G> {
+    }/*
     /// Returns a mutable reference to the underlying data.
     ///
     /// This method is zero-cost: By holding a mutable reference to the lock, the compiler has
@@ -635,8 +638,9 @@ impl<T, G: SpinGuardian> RwLock<T, G> {
     /// is still safe.
     pub(super) fn as_ptr(&self) -> *mut T {
         self.val.get()
-    }
-}*/
+    }*/
+
+}
 
 /* the trait `core::fmt::Debug` is not implemented for `vstd::cell::pcell::PCell<T>`
 impl<T: ?Sized + fmt::Debug, G> fmt::Debug for RwLock<T, G> {
@@ -645,8 +649,8 @@ impl<T: ?Sized + fmt::Debug, G> fmt::Debug for RwLock<T, G> {
     }
 }*/
 
-/// Because there can be more than one readers to get the T's immutable ref,
-/// so T must be Sync to guarantee the sharing safety.
+// There can be more than one readers to get the `T`'s immutable reference,
+// so `T` must be `Sync` to guarantee the sharing safety.
 #[verifier::external]
 unsafe impl<T: Send, G> Send for RwLock<T, G> {
 
@@ -657,12 +661,12 @@ unsafe impl<T: Send + Sync, G> Sync for RwLock<T, G> {
 
 }
 
+// `G::Guard` and `G::ReadGuard` are `!Send` and `!Sync`, so are the guards.
 impl<T  /*: ?Sized*/ , G: SpinGuardian> !Send for RwLockWriteGuard<'_, T, G> {
 
 }
 
-#[verifier::external]
-unsafe impl<T: Sync, G: SpinGuardian> Sync for RwLockWriteGuard<'_, T, G> {
+impl<T, G: SpinGuardian> !Sync for RwLockWriteGuard<'_, T, G> {
 
 }
 
@@ -670,8 +674,7 @@ impl<T  /*: ?Sized*/ , G: SpinGuardian> !Send for RwLockReadGuard<'_, T, G> {
 
 }
 
-#[verifier::external]
-unsafe impl<T: Sync, G: SpinGuardian> Sync for RwLockReadGuard<'_, T, G> {
+impl<T, G: SpinGuardian> !Sync for RwLockReadGuard<'_, T, G> {
 
 }
 
@@ -679,8 +682,7 @@ impl<T  /*: ?Sized*/ , G: SpinGuardian> !Send for RwLockUpgradeableGuard<'_, T, 
 
 }
 
-#[verifier::external]
-unsafe impl<T: Sync, G: SpinGuardian> Sync for RwLockUpgradeableGuard<'_, T, G> {
+impl<T, G: SpinGuardian> !Sync for RwLockUpgradeableGuard<'_, T, G> {
 
 }
 
@@ -909,7 +911,7 @@ impl<T: ?Sized + fmt::Debug, G: SpinGuardian> fmt::Debug for RwLockWriteGuard<'_
 }*/
 
 /// A guard that provides immutable data access but can be atomically
-/// upgraded to `RwLockWriteGuard`.
+/// upgraded to [`RwLockWriteGuard`].
 #[verifier::reject_recursive_types(T)]
 #[verifier::reject_recursive_types(G)]
 pub struct RwLockUpgradeableGuard<'a, T  /*: ?Sized*/ , G: SpinGuardian> {
@@ -954,25 +956,23 @@ impl<'a, T  /*: ?Sized*/ , G: SpinGuardian> RwLockUpgradeableGuard<'a, T, G> {
     /// while previous readers remain unaffected. The calling thread
     /// will spin-wait until previous readers finish.
     #[verifier::exec_allows_no_decreases_clause]
-    pub fn upgrade(  /* mut */ self) -> RwLockWriteGuard<'a, T, G> {
-        let mut this = self;
+    pub fn upgrade(mut self) -> RwLockWriteGuard<'a, T, G> {
         proof! {
-            use_type_invariant(&this);
-            use_type_invariant(&this.inner);
+            use_type_invariant(&self);
+            use_type_invariant(&self.inner);
             lemma_consts_properties();
         }
         // self.inner.lock.fetch_or(BEING_UPGRADED, Acquire);
         atomic_with_ghost!(
-            this.inner.lock => fetch_or(BEING_UPGRADED);
+            self.inner.lock => fetch_or(BEING_UPGRADED);
             update prev -> next;
             ghost g => {
                 lemma_consts_properties_prev_next(prev, next);
             }
         );
         loop {
-            // self = match self.try_upgrade() {
-            this =
-            match this.try_upgrade() {
+            self =
+            match self.try_upgrade() {
                 Ok(guard) => return guard,
                 Err(e) => e,
             };
@@ -986,15 +986,14 @@ impl<'a, T  /*: ?Sized*/ , G: SpinGuardian> RwLockUpgradeableGuard<'a, T, G> {
     ///
     /// This function is not exposed publicly because the `BEING_UPGRADED` bit
     /// is set only in [`Self::upgrade`].
-    fn try_upgrade(  /* mut */ self) -> Result<RwLockWriteGuard<'a, T, G>, Self> {
+    fn try_upgrade(mut self) -> Result<RwLockWriteGuard<'a, T, G>, Self> {
         proof! {
             use_type_invariant(&self);
             use_type_invariant(self.inner);
             lemma_consts_properties();
         }
-        let mut this = self;
         proof_decl! {
-            let tracked mut upread_guard_token = this.tracked_token.get();
+            let tracked mut upread_guard_token = self.tracked_token.get();
             let tracked mut write_perm: Option<PointsTo<T>> = None;
             let tracked mut err_upread_guard_token: Option<OneLeftOwner<HalfPerm<T>, NoPerm<T>, 3>> = None;
             let tracked mut retract_upgrade_token: Option<UniqueToken> = None;
@@ -1009,7 +1008,7 @@ impl<'a, T  /*: ?Sized*/ , G: SpinGuardian> RwLockUpgradeableGuard<'a, T, G> {
         // );
         let res =
             atomic_with_ghost!(
-            this.inner.lock => compare_exchange(UPGRADEABLE_READER | BEING_UPGRADED, WRITER | UPGRADEABLE_READER);
+            self.inner.lock => compare_exchange(UPGRADEABLE_READER | BEING_UPGRADED, WRITER | UPGRADEABLE_READER);
             update prev -> next;
             returning res;
             ghost g => {
@@ -1036,8 +1035,8 @@ impl<'a, T  /*: ?Sized*/ , G: SpinGuardian> RwLockUpgradeableGuard<'a, T, G> {
             }
         );
         if res.is_ok() {
-            let inner = this.inner;
-            let guard = this.guard.transfer_to();
+            let guard = self.guard.transfer_to();
+            let inner = self.inner;
             // drop(self);
             atomic_with_ghost!(
                 inner.lock => fetch_sub(UPGRADEABLE_READER);
@@ -1056,8 +1055,8 @@ impl<'a, T  /*: ?Sized*/ , G: SpinGuardian> RwLockUpgradeableGuard<'a, T, G> {
             );
             Ok(
                 RwLockWriteGuard {
-                    inner,
                     guard,
+                    inner,
                     tracked_perm: Tracked(write_perm.tracked_unwrap()),
                     tracked_token: Tracked(write_guard_token.tracked_unwrap()),
                 },
@@ -1065,8 +1064,8 @@ impl<'a, T  /*: ?Sized*/ , G: SpinGuardian> RwLockUpgradeableGuard<'a, T, G> {
         } else {
             Err(
                 RwLockUpgradeableGuard {
-                    inner: this.inner,
-                    guard: this.guard,
+                    guard: self.guard,
+                    inner: self.inner,
                     tracked_token: Tracked(err_upread_guard_token.tracked_unwrap()),
                 },
             )

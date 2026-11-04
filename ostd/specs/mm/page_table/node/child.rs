@@ -1,8 +1,11 @@
 use vstd::prelude::*;
-
 use vstd_extra::ownership::*;
 
-use crate::specs::mm::frame::{mapping::meta_to_index, meta_region_owners::MetaRegionOwners};
+use crate::specs::mm::frame::{
+    mapping::{frame_to_index, meta_to_index},
+    meta_owners::FracMetadataPerm,
+    meta_region_owners::MetaRegionOwners,
+};
 
 use crate::arch::mm::PagingConsts;
 use crate::mm::{
@@ -18,8 +21,12 @@ impl<C: PageTableConfig> OwnerOf for Child<C> {
         match self {
             Self::PageTable(node) => {
                 &&& owner.is_node()
-                &&& node.ptr.addr() == owner.node().meta_vaddr()
-                &&& node.index() == meta_to_index(node.ptr.addr())
+                &&& node.slot_vaddr() == owner.node().slot_vaddr()
+                &&& node.index() == meta_to_index(node.slot_vaddr())
+                &&& node.ptr_inv()
+                &&& node.inv()
+                &&& owner.node_permission is None
+                &&& owner.node().matches_permission(node.frac_metadata_perm())
             },
             Self::Frame(paddr, level, prop) => {
                 &&& owner.is_frame()
@@ -39,7 +46,13 @@ impl<'a, C: PageTableConfig> OwnerOf for ChildRef<'a, C> {
         match self {
             Self::PageTable(node) => {
                 &&& owner.is_node()
-                &&& node.inner@.ptr.addr() == owner.node().meta_vaddr()
+                &&& node.slot_vaddr() == owner.node().slot_vaddr()
+                &&& node@.ptr_inv()
+                &&& node.external_meta_wf(owner.node().metadata, ())
+                &&& node@.tracked_metadata_perm@ matches Some(permission) ==> {
+                    &&& node.inv()
+                    &&& owner.node().matches_permission(permission)
+                }
             },
             Self::Frame(paddr, level, prop) => {
                 &&& owner.is_frame()
@@ -52,53 +65,29 @@ impl<'a, C: PageTableConfig> OwnerOf for ChildRef<'a, C> {
 }
 
 impl<C: PageTableConfig> Child<C> {
-    pub open spec fn get_node(self) -> Option<PageTableNode<C>> {
-        match self {
-            Self::PageTable(node) => Some(node),
-            _ => None,
-        }
-    }
-
-    pub open spec fn get_frame_tuple(self) -> Option<(Paddr, PagingLevel, PageProperty)> {
-        match self {
-            Self::Frame(paddr, level, prop) => Some((paddr, level, prop)),
-            _ => None,
-        }
-    }
-
-    pub open spec fn into_pte_frame_spec(self, tuple: (Paddr, PagingLevel, PageProperty)) -> C::E {
-        let (paddr, level, prop) = tuple;
-        C::E::new_page_spec(paddr, level, prop)
-    }
-
-    pub open spec fn into_pte_none_spec(self) -> C::E {
-        C::E::new_absent_spec()
-    }
-
     pub open spec fn from_pte_spec(
         pte: C::E,
         level: PagingLevel,
         regions: MetaRegionOwners,
+        permission: Option<FracMetadataPerm>,
     ) -> Self {
         if !pte.is_present() {
             Self::None
         } else if pte.is_last(level) {
             Self::Frame(pte.paddr(), level, pte.prop())
         } else {
-            Self::PageTable(PageTableNode::from_raw_spec(pte.paddr()))
+            Self::PageTable(
+                PageTableNode::from_raw_spec(
+                    pte.paddr(),
+                    regions.slots[frame_to_index(pte.paddr())],
+                    permission,
+                ),
+            )
         }
     }
 
-    pub open spec fn from_pte_frame_spec(pte: C::E, level: PagingLevel) -> Self {
-        Self::Frame(pte.paddr(), level, pte.prop())
-    }
-
-    pub open spec fn from_pte_pt_spec(paddr: Paddr, regions: MetaRegionOwners) -> Self {
-        Self::PageTable(PageTableNode::from_raw_spec(paddr))
-    }
-
     pub open spec fn invariants(self, owner: EntryOwner<C>, regions: MetaRegionOwners) -> bool {
-        &&& owner.inv_base()
+        &&& owner.inv()
         &&& regions.inv()
         &&& self.wf(owner)
         &&& match self {
@@ -119,43 +108,22 @@ impl<C: PageTableConfig> ChildRef<'_, C> {
 }
 
 impl<C: PageTableConfig> EntryOwner<C> {
-    pub open spec fn from_pte_regions_spec(self, regions: MetaRegionOwners) -> MetaRegionOwners {
-        if self.is_node() {
-            let index = frame_to_index(self.meta_slot_paddr()->0);
-            MetaRegionOwners {
-                frame_obligations: regions.frame_obligations.insert(index),
-                ..regions
-            }
-        } else {
-            regions
+    pub open spec fn into_pte_owner_spec(self, child: Child<C>) -> EntryOwner<C> {
+        match child {
+            Child::PageTable(node) => EntryOwner {
+                node_permission: Some(node.frac_metadata_perm()),
+                ..self
+            },
+            _ => self,
         }
-    }
-
-    pub open spec fn into_pte_regions_spec(self, regions: MetaRegionOwners) -> MetaRegionOwners {
-        if self.is_node() {
-            let index = frame_to_index(self.meta_slot_paddr()->0);
-            // Canonical model: forgetting a live PT-node into a PTE CONSUMES
-            // its pending-Drop obligation (the body's `MD::new` redeems one
-            // entry at the node's slot), mirroring `Frame::into_raw`. `slots`
-            // / `slot_owners` are untouched. Balances the `+1` minted by
-            // `from_pte` (`from_pte_regions_spec`) / `PageTableNode::alloc`.
-            MetaRegionOwners {
-                frame_obligations: regions.frame_obligations.remove(index),
-                ..regions
-            }
-        } else {
-            // Forgetting a mapped frame / clearing an absent entry leaves the
-            // per-frame ledger untouched (`item_into_raw` is `external_body`).
-            regions
-        }
-    }
-
-    pub open spec fn into_pte_owner_spec(self) -> EntryOwner<C> {
-        self
     }
 
     pub open spec fn from_pte_owner_spec(self) -> EntryOwner<C> {
-        self
+        if self.is_node() {
+            EntryOwner { node_permission: None, ..self }
+        } else {
+            self
+        }
     }
 
     /// This is equivalent to the other `invariants` relations, combining the `inv` predicates for each
@@ -165,6 +133,7 @@ impl<C: PageTableConfig> EntryOwner<C> {
         &&& regions.inv()
         &&& self.match_pte(pte, self.parent_level)
         &&& self.metaregion_sound(regions)
+        &&& self.is_node() ==> self.node_permission is Some
     }
 }
 

@@ -64,21 +64,19 @@
 //! can have catastrophic consequences,
 //! as the task's stack and internal state may be corrupted by concurrent modifications.
 // mod fifo_scheduler;
+pub mod info;
 #[cfg(feature = "irc11")]
 mod thread_view;
-// pub mod info;
-use alloc::sync::Arc;
 use spin::Once;
 
 // use super::{preempt::cpu_local, processor, Task};
 use super::Task;
 // use crate::{
 //     cpu::{CpuId, CpuSet, PinCurrentCpu},
-//     prelude::*,
 //     task::disable_preempt,
 //     timer,
 // };
-use crate::specs::mm::cpu::CpuId;
+use crate::{cpu::CpuId, prelude::*};
 
 #[cfg(feature = "irc11")]
 pub use self::thread_view::SchedulerIrc11State;

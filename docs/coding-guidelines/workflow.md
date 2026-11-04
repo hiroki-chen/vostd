@@ -1,5 +1,19 @@
 # Verification Workflow
 
+### Inspect the owning model
+
+<!-- guideline: inspect-the-owning-model -->
+
+Start with the target and relevant sibling modules. For code under `ostd/src/`,
+inspect the corresponding `ostd/specs/` subsystem when it models the same
+concept. Follow imports and fresh verification diagnostics to decide whether a
+verified library or architecture/task model belongs in the repair.
+
+Do not inspect or modify every neighboring proof library preemptively. Search
+the active `vstd` checkout after checking the owning VOSTD model and local
+helpers, especially when the failure concerns an existing standard-library
+specification.
+
 ### Verify across supported hosts
 
 <!-- guideline: verify-across-supported-hosts -->
@@ -47,9 +61,15 @@ removed when upstream support lands.
 Discuss fundamental missing models, such as the semantics of `Borrow`, with
 Verus maintainers before cementing a project-local axiom around them.
 
+Reviewers track these debts: a `vstd_extra` model copied from an
+upstreamable standard-library contract carries the request to
+contribute it ("Please contribute this to Verus later"), so plan
+the upstream PR instead of letting the local model harden here.
+
 See also: PR [#699](https://github.com/asterinas/vostd/pull/699#discussion_r3747182992),
-[#704](https://github.com/asterinas/vostd/pull/704#issuecomment-5265453465), and
-[#699](https://github.com/asterinas/vostd/pull/699#issuecomment-5354033977).
+[#704](https://github.com/asterinas/vostd/pull/704#issuecomment-5265453465),
+[#699](https://github.com/asterinas/vostd/pull/699#issuecomment-5354033977), and
+[#789](https://github.com/asterinas/vostd/pull/789#discussion_r4118339217).
 
 ### Preserve toolchain configurations
 

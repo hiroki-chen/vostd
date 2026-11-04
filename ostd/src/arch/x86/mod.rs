@@ -7,12 +7,12 @@ pub(crate) mod ex_table;
 pub(crate) mod io;
 pub(crate) mod iommu;*/
 pub(crate) mod irq;
-/* pub(crate) mod kernel; */
+pub(crate) mod kernel;
 pub(crate) mod mm;
 /*pub(crate) mod pci;
 pub mod qemu;
-pub(crate) mod serial;
-pub(crate) mod task; */
+pub(crate) mod serial; */
+pub(crate) mod task;
 pub mod timer;
 /* pub mod trap; */
 
