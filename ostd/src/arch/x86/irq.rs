@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Interrupts.
 //!
-//! Trusted local IRQ contracts model IF. Enable uses STI/NOP; read/disable
-//! still panic, so their postconditions apply only on normal return.
+//! Trusted local IRQ contracts model IF. Enable uses STI/NOP; read and disable
+//! access the processor's interrupt flag. CPU-bound proof owner provisioning
+//! remains a separate obligation.
 use vstd::prelude::*;
 use vstd_extra::ownership::Inv;
 
@@ -119,8 +120,7 @@ pub(crate) fn enable_local_and_halt() {
     opens_invariants none
 )]
 pub(crate) fn disable_local() {
-    // x86_64::instructions::interrupts::disable();
-    unimplemented!()
+    x86_64::instructions::interrupts::disable();
 }
 
 #[verus_verify(external_body)]
@@ -132,8 +132,9 @@ pub(crate) fn disable_local() {
     opens_invariants none
 )]
 pub(crate) fn is_local_enabled() -> bool {
-    // (rflags::read_raw() & RFlags::INTERRUPT_FLAG.bits()) != 0
-    unimplemented!()
+    use x86_64::registers::rflags::{self, RFlags};
+
+    (rflags::read_raw() & RFlags::INTERRUPT_FLAG.bits()) != 0
 }
 
 // ####### Inter-Processor Interrupts (IPIs) #######
