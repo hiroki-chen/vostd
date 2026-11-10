@@ -106,6 +106,8 @@ impl RunningTaskContext {
 #[must_use]
 #[derive(Debug)]
 pub struct DisabledPreemptGuard {
+    // This private field prevents user from constructing values of this type directly.
+    _private: (),
     irq_guard: DisabledLocalIrqGuard,
 }
 
@@ -128,7 +130,7 @@ impl GuardTransfer for DisabledPreemptGuard {
             ret.restores_irqs_spec() == old(self).restores_irqs_spec(),
             !final(self).restores_irqs_spec(),
     {
-        Self { irq_guard: self.irq_guard.transfer_to() }
+        Self { _private: (), irq_guard: self.irq_guard.transfer_to() }
     }
 }
 
@@ -137,6 +139,7 @@ impl GuardTransfer for DisabledPreemptGuard {
 #[verus_verify]
 pub fn disable_preempt() -> DisabledPreemptGuard {
     DisabledPreemptGuard {
+        _private: (),
         irq_guard: disable_local(),
     }
 }
