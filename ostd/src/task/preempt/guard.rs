@@ -95,7 +95,7 @@ impl RunningTaskContext {
 }
 
 } // verus!
-/// A guard that prevents preemption until it is dropped.
+/// A guard for disable preempt.
 ///
 /// The task scheduler and its CPU-local preemption count are not active yet.
 /// Until they are restored, this guard masks local IRQs, including the timer
@@ -113,6 +113,7 @@ pub struct DisabledPreemptGuard {
 
 impl !Send for DisabledPreemptGuard {}
 
+// Required by `InAtomicMode`. See the safety section of its doc comments.
 impl !Sync for DisabledPreemptGuard {}
 
 verus! {
